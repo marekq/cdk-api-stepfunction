@@ -23,6 +23,7 @@
   "dependencies": {
     "@aws-cdk/aws-apigateway": "^1.129.0",
     "@aws-cdk/aws-dynamodb": "^1.129.0",
+    "@aws-cdk/aws-lambda": "^1.129.0",
     "@aws-cdk/aws-lambda-nodejs": "^1.129.0",
     "@aws-cdk/aws-stepfunctions": "^1.129.0",
     "@aws-cdk/aws-stepfunctions-tasks": "^1.129.0",

@@ -3,11 +3,15 @@ const ddbclient = new AWS.DynamoDB.DocumentClient();
 
 exports.handler = async function (event: any, context: any) {
     
-    ddbclient.put({
-        TableName: process.env.DYNAMODB_TABLE,
-        Item: {
-            id: '2',
-            name: 'lambdaPut'
+    const putcmd = await ddbclient.put(
+        {
+            TableName: process.env.DYNAMODB_TABLE,
+            Item: {
+                id: 'lambdaPut',
+                name: 'lambdaPut'
+            }
         }
-    })
+    ).promise();
+
+    return putcmd
 }
