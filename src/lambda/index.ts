@@ -7,8 +7,7 @@ exports.handler = async function (event: any, context: any) {
         {
             TableName: process.env.DYNAMODB_TABLE,
             Item: {
-                id: 'lambdaGet',
-                name: 'lambdaGet'
+                id: 'lambdaGet'
             }
         }
     ).promise();

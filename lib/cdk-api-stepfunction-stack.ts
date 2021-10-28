@@ -15,11 +15,7 @@ export class CdkApiStepfunctionStack extends Stack {
       partitionKey: {
         name: 'id',
         type: AttributeType.STRING
-      },
-      sortKey: {
-        name: 'name',
-        type: AttributeType.STRING
-      },
+      }
     });
 
     // Option 1 - Get DDB record using Lambda (512MB, nodejs connection reuse)
@@ -52,12 +48,9 @@ export class CdkApiStepfunctionStack extends Stack {
           TableName: ddbTable.tableName,
           Key: {
             id: {
-              S: 'sdkGet'
-            },
-            name: {
-              S: 'sdkGet'
+              "S": 'lambdaGet'
             }
-          }
+          },
         },
         ResultPath: '$.sdkGet'
       }
