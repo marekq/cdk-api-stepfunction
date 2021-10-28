@@ -1,5 +1,5 @@
 import { Construct, Duration, Stack, StackProps } from '@aws-cdk/core';
-import { CustomState, LogLevel, StateMachine, StateMachineType } from '@aws-cdk/aws-stepfunctions';
+import { CustomState, LogLevel, Parallel, StateMachine, StateMachineType } from '@aws-cdk/aws-stepfunctions';
 import { NodejsFunction } from '@aws-cdk/aws-lambda-nodejs';
 import { Architecture, Runtime, Tracing } from '@aws-cdk/aws-lambda';
 import { AttributeType, Table } from '@aws-cdk/aws-dynamodb';
@@ -10,7 +10,7 @@ export class CdkApiStepfunctionStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
     super(scope, id, props);
 
-    // Create dynamodb table, with primary key set to 'id'
+    // Create DynamoDB table, with primary key set to 'id' and sort key to 'name'
     const ddbTable = new Table(this, 'Table', {
       partitionKey: {
         name: 'id',
@@ -22,8 +22,8 @@ export class CdkApiStepfunctionStack extends Stack {
       },
     });
 
-    // Option 1 - put record using Lambda (512MB, nodejs connection reuse)
-    const ddbGetLambda = new NodejsFunction(this, 'DdbPutFunction', {
+    // Option 1 - Get DDB record using Lambda (512MB, nodejs connection reuse)
+    const ddbGetLambda = new NodejsFunction(this, 'DdbGetFunction', {
       entry: 'src/lambda/index.ts',
       handler: 'handler',
       runtime: Runtime.NODEJS_14_X,
@@ -37,39 +37,41 @@ export class CdkApiStepfunctionStack extends Stack {
       }
     });
 
-    // Create Fetch Lambda Step
-    const lamdbdaPutToDDB = new LambdaInvoke(this, 'lamdbdaPutToDDB', { 
+    // Create Get DDB Lambda Step
+    const lambdaGetDdbRecord = new LambdaInvoke(this, 'lamdbdaGetToDDB', { 
       lambdaFunction: ddbGetLambda, 
-      outputPath: '$.Payload'
+      resultPath: '$.lambdaGet'
     });
 
-    // Option 2 - Create SF SDK Step to put DDB record
-    const sdkPutToDDB = new CustomState(this, 'sdkPutToDDB', {
+    // Option 2 - Create SF SDK Step to get DDB record
+    const sdkGetDdbRecord = new CustomState(this, 'sdkGetToDDB', {
       stateJson: {
         Type: 'Task',
-        Resource: 'arn:aws:states:::dynamodb:putItem',
+        Resource: 'arn:aws:states:::dynamodb:getItem',
         Parameters: {
           TableName: ddbTable.tableName,
-          Item: {
+          Key: {
             id: {
-              "S": 'sfPut'
+              S: 'sdkGet'
             },
             name: {
-              "S": "sfPut"
+              S: 'sdkGet'
             }
-          },
+          }
         },
-        ResultPath: '$.Payload'
+        ResultPath: '$.sdkGet'
       }
     })
 
-    // Create SF definition (do Lambda put, followed by SF SDK put to DynamoDB)
-    const sfDefinition = lamdbdaPutToDDB.next(sdkPutToDDB);
+    // Create SF definition (do parallel get from Lambda and SF SDK to DynamoDB)
+    const sfDefinition = new Parallel(this, 'sfDefinition');
+    sfDefinition.branch(lambdaGetDdbRecord);
+    sfDefinition.branch(sdkGetDdbRecord);
 
     // Create State Machine log group
     const logGroup = new LogGroup(this, 'SfLogGroup');
 
-    // Create express state machine
+    // Create express state machine with logging enabled
     const stateMachine = new StateMachine(this, 'StateMachine', {
       definition: sfDefinition,
       tracingEnabled: true,
