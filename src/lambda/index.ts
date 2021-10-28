@@ -9,7 +9,7 @@ exports.handler = async function (event: any, context: any) {
         {
             TableName: process.env.DYNAMODB_TABLE,
             Key: {
-                'id': 'lambdaGet'
+                id: 'lambdaGet'
             }
         },
         (err: any, data: any) => {
@@ -21,8 +21,8 @@ exports.handler = async function (event: any, context: any) {
                 output = data;
             }
         }
-    );
+    ).promise();
 
-    console.log('put record' + output);
+    console.log('put record ' + output);
     return output;
 }

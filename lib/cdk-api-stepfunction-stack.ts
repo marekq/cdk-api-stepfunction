@@ -1,5 +1,5 @@
 import { Construct, Duration, RemovalPolicy, Stack, StackProps } from '@aws-cdk/core';
-import { CustomState, LogLevel, Parallel, StateMachine, StateMachineType } from '@aws-cdk/aws-stepfunctions';
+import { LogLevel, Parallel, Pass, StateMachine, StateMachineType, Succeed } from '@aws-cdk/aws-stepfunctions';
 import { NodejsFunction } from '@aws-cdk/aws-lambda-nodejs';
 import { Architecture, Runtime, Tracing } from '@aws-cdk/aws-lambda';
 import { AttributeType, Table } from '@aws-cdk/aws-dynamodb';
@@ -35,13 +35,13 @@ export class CdkApiStepfunctionStack extends Stack {
     });
 
     // Create Get DDB Lambda Step
-    const lambdaGetDdbRecord = new LambdaInvoke(this, 'lamdbdaGetToDDB', { 
+    const lambdaGetDdbRecord = new LambdaInvoke(this, 'DdbRecordLambda', { 
       lambdaFunction: ddbGetLambda, 
       resultPath: '$.lambdaGet'
     });
 
     // Option 2 - Create SF SDK Step to get DDB record
-    const sdkGetDdbRecord = new DynamoGetItem(this, 'DynamoGetItem', {
+    const sdkGetDdbRecord = new DynamoGetItem(this, 'DdbRecordSdkGet', {
       table: ddbTable,
       key: { 
         id: DynamoAttributeValue.fromString("lambdaGet") 
@@ -51,8 +51,16 @@ export class CdkApiStepfunctionStack extends Stack {
 
     // Create SF definition (do parallel get from Lambda and SF SDK to DynamoDB)
     const sfDefinition = new Parallel(this, 'sfDefinition');
-    sfDefinition.branch(lambdaGetDdbRecord);
-    sfDefinition.branch(sdkGetDdbRecord);
+    sfDefinition.branch(lambdaGetDdbRecord)
+    sfDefinition.branch(sdkGetDdbRecord)
+    .next(new Pass(this, 'End', {
+      /*
+      parameters: {
+        'lambdaGet.$': '$.lambdaGet',
+        'sdkGet.$': '$.sdkGet'
+      }
+      */
+    }));
 
     // Create State Machine log group
     const logGroup = new LogGroup(this, 'SfLogGroup');
