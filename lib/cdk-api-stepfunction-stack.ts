@@ -1,9 +1,9 @@
-import { Construct, Duration, Stack, StackProps } from '@aws-cdk/core';
+import { Construct, Duration, RemovalPolicy, Stack, StackProps } from '@aws-cdk/core';
 import { CustomState, LogLevel, Parallel, StateMachine, StateMachineType } from '@aws-cdk/aws-stepfunctions';
 import { NodejsFunction } from '@aws-cdk/aws-lambda-nodejs';
 import { Architecture, Runtime, Tracing } from '@aws-cdk/aws-lambda';
 import { AttributeType, Table } from '@aws-cdk/aws-dynamodb';
-import { LambdaInvoke } from '@aws-cdk/aws-stepfunctions-tasks';
+import { DynamoAttributeValue, DynamoGetItem, LambdaInvoke } from '@aws-cdk/aws-stepfunctions-tasks';
 import { LogGroup } from '@aws-cdk/aws-logs';
 
 export class CdkApiStepfunctionStack extends Stack {
@@ -12,9 +12,10 @@ export class CdkApiStepfunctionStack extends Stack {
 
     // Create DynamoDB table, with primary key set to 'id' and sort key to 'name'
     const ddbTable = new Table(this, 'Table', {
+      removalPolicy: RemovalPolicy.DESTROY,
       partitionKey: {
         name: 'id',
-        type: AttributeType.STRING
+        type: AttributeType.STRING,
       }
     });
 
@@ -40,21 +41,13 @@ export class CdkApiStepfunctionStack extends Stack {
     });
 
     // Option 2 - Create SF SDK Step to get DDB record
-    const sdkGetDdbRecord = new CustomState(this, 'sdkGetToDDB', {
-      stateJson: {
-        Type: 'Task',
-        Resource: 'arn:aws:states:::dynamodb:getItem',
-        Parameters: {
-          TableName: ddbTable.tableName,
-          Key: {
-            id: {
-              "S": 'lambdaGet'
-            }
-          },
-        },
-        ResultPath: '$.sdkGet'
-      }
-    })
+    const sdkGetDdbRecord = new DynamoGetItem(this, 'DynamoGetItem', {
+      table: ddbTable,
+      key: { 
+        id: DynamoAttributeValue.fromString("lambdaGet") 
+      },
+      resultPath: '$.sdkGet'
+    });
 
     // Create SF definition (do parallel get from Lambda and SF SDK to DynamoDB)
     const sfDefinition = new Parallel(this, 'sfDefinition');
@@ -76,8 +69,8 @@ export class CdkApiStepfunctionStack extends Stack {
       },
     });
 
-    // Grant DDB read/write access to State Machine and Lambda
-    ddbTable.grantReadWriteData(stateMachine);
-    ddbTable.grantReadWriteData(ddbGetLambda);
+    // Grant DynamoDB read access to State Machine and Lambda
+    ddbTable.grantReadData(stateMachine);
+    ddbTable.grantReadData(ddbGetLambda);
   }
 }
