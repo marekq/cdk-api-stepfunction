@@ -4,40 +4,34 @@ AWSXRay.capturePromise();
 AWSXRay.setContextMissingStrategy("LOG_ERROR");
 
 // Import AWS SDK
-const AWS = require('aws-sdk');
-AWSXRay.captureAWS(require('aws-sdk'));
+const XAWS = AWSXRay.captureAWS(require('aws-sdk'));
 
 // Create DynamoDB client
-const ddbclient = new AWS.DynamoDB.DocumentClient();
+const ddbclient = new XAWS.DynamoDB.DocumentClient();
 
 // Lambda handler
 exports.handler = async function (event: any, context: any) {
     
-	let seg = AWSXRay.getSegment().addNewSubsegment("lambdaGet");
-    let output;
+    let getcmd;
 
     // Get records from DynamoDB
-    const getcmd = await ddbclient.get(
-        {
-            TableName: process.env.DYNAMODB_TABLE,
-            Key: {
-                id: 'lambdaGet'
+    try {
+        getcmd = await ddbclient.get(
+            {
+                TableName: process.env.DYNAMODB_TABLE,
+                Key: { id: 'lambdaGet' }
             }
-        },
-        (err: any, data: any) => {
-            if (err) {
-                console.log(err);
-                output = err;
-            } else {
-                console.log(data);
-                output = data;
-            }
-        }
-    ).promise();
+        ).promise();
+
+    } catch (error) {
+
+        const msg = 'Unable to read from DynamoDB ' + error;
+        console.log(msg);
+        return msg;
+    }
 
     // Return DynamoDB records
-    console.log('get record ' + output);
-
-    seg.close();
-    return output;
+    console.log('get record ' + getcmd);
+    
+    return getcmd;
 }

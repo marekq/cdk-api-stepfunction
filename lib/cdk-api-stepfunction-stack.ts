@@ -26,7 +26,8 @@ export class CdkApiStepfunctionStack extends Stack {
       code: Code.fromAsset('src/layer/'),
       compatibleRuntimes: [Runtime.NODEJS_14_X],
       layerVersionName: 'lambdaLayer',
-      description: 'xray'
+      description: 'xray',
+      removalPolicy: RemovalPolicy.DESTROY
     });
 
     // Create Lambda function for record retrieval
@@ -54,7 +55,7 @@ export class CdkApiStepfunctionStack extends Stack {
       resultSelector: {
         "LambdaRecordContent.$": "$.Payload"
       },
-      resultPath: '$.lambdaGet'
+      resultPath: '$'
     });
 
     // Option 2 - Create SF SDK Step to get DDB record
@@ -66,7 +67,7 @@ export class CdkApiStepfunctionStack extends Stack {
       resultSelector: {
         "SdkrecordContent.$": "$.Item"
       },
-      resultPath: '$.sdkGet'
+      resultPath: '$'
     });
 
     // Create SF definition (do parallel get from Lambda and SF SDK to DynamoDB)
