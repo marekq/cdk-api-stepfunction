@@ -37,6 +37,9 @@ export class CdkApiStepfunctionStack extends Stack {
     // Create Get DDB Lambda Step
     const lambdaGetDdbRecord = new LambdaInvoke(this, 'DdbRecordLambda', { 
       lambdaFunction: ddbGetLambda, 
+      resultSelector: {
+        "LambdaRecordContent.$": "$.Payload"
+      },
       resultPath: '$.lambdaGet'
     });
 
@@ -46,6 +49,9 @@ export class CdkApiStepfunctionStack extends Stack {
       key: { 
         id: DynamoAttributeValue.fromString("lambdaGet") 
       },
+      resultSelector: {
+        "SdkrecordContent.$": "$.Item"
+      },
       resultPath: '$.sdkGet'
     });
 
@@ -53,14 +59,7 @@ export class CdkApiStepfunctionStack extends Stack {
     const sfDefinition = new Parallel(this, 'sfDefinition');
     sfDefinition.branch(lambdaGetDdbRecord)
     sfDefinition.branch(sdkGetDdbRecord)
-    .next(new Pass(this, 'End', {
-      /*
-      parameters: {
-        'lambdaGet.$': '$.lambdaGet',
-        'sdkGet.$': '$.sdkGet'
-      }
-      */
-    }));
+    .next(new Pass(this, 'End'));
 
     // Create State Machine log group
     const logGroup = new LogGroup(this, 'SfLogGroup');
