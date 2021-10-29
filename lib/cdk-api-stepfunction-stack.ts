@@ -1,7 +1,7 @@
 import { Construct, Duration, RemovalPolicy, Stack, StackProps } from '@aws-cdk/core';
 import { LogLevel, Parallel, Pass, StateMachine, StateMachineType, Succeed } from '@aws-cdk/aws-stepfunctions';
 import { NodejsFunction } from '@aws-cdk/aws-lambda-nodejs';
-import { Architecture, Runtime, Tracing } from '@aws-cdk/aws-lambda';
+import { Architecture, Code, LayerVersion, Runtime, Tracing } from '@aws-cdk/aws-lambda';
 import { AttributeType, Table } from '@aws-cdk/aws-dynamodb';
 import { DynamoAttributeValue, DynamoGetItem, LambdaInvoke } from '@aws-cdk/aws-stepfunctions-tasks';
 import { LogGroup } from '@aws-cdk/aws-logs';
@@ -20,6 +20,16 @@ export class CdkApiStepfunctionStack extends Stack {
     });
 
     // Option 1 - Get DDB record using Lambda (512MB, nodejs connection reuse)
+
+    // Create Lambda layer with X-Ray tracing
+    const lambdaLayers = new LayerVersion(this, 'XrayLayer', {
+      code: Code.fromAsset('src/layer/'),
+      compatibleRuntimes: [Runtime.NODEJS_14_X],
+      layerVersionName: 'lambdaLayer',
+      description: 'xray'
+    });
+
+    // Create Lambda function for record retrieval
     const ddbGetLambda = new NodejsFunction(this, 'DdbGetFunction', {
       entry: 'src/lambda/index.ts',
       handler: 'handler',
@@ -31,6 +41,10 @@ export class CdkApiStepfunctionStack extends Stack {
       environment: {
         DYNAMODB_TABLE: ddbTable.tableName,
         AWS_NODEJS_CONNECTION_REUSE_ENABLED: '1'
+      },
+      layers: [lambdaLayers],
+      bundling: {
+        externalModules: ['aws-xray-sdk-core']
       }
     });
 

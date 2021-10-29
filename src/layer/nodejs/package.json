@@ -1,0 +1,11 @@
+{
+    "name": "xray-layer",
+    "version": "1.0.0",
+    "private": true,
+    "devDependencies": {
+      "aws-sdk": "2.1009.0"
+    },
+    "dependencies": {
+      "aws-xray-sdk-core": "3.3.3"
+    }
+  }
