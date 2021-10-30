@@ -1,10 +1,12 @@
 import { Construct, Duration, RemovalPolicy, Stack, StackProps } from '@aws-cdk/core';
-import { LogLevel, Parallel, Pass, StateMachine, StateMachineType, Succeed } from '@aws-cdk/aws-stepfunctions';
+import { CustomState, LogLevel, Parallel, Pass, StateMachine, StateMachineType, Succeed } from '@aws-cdk/aws-stepfunctions';
 import { NodejsFunction } from '@aws-cdk/aws-lambda-nodejs';
 import { Architecture, Code, LayerVersion, Runtime, Tracing } from '@aws-cdk/aws-lambda';
 import { AttributeType, Table } from '@aws-cdk/aws-dynamodb';
 import { DynamoAttributeValue, DynamoGetItem, LambdaInvoke } from '@aws-cdk/aws-stepfunctions-tasks';
-import { LogGroup } from '@aws-cdk/aws-logs';
+import { LogGroup, LogStream, RetentionDays } from '@aws-cdk/aws-logs';
+import { EventBus, Rule} from '@aws-cdk/aws-events';
+import { CloudWatchLogGroup } from '@aws-cdk/aws-events-targets';
 
 export class CdkApiStepfunctionStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
@@ -19,6 +21,30 @@ export class CdkApiStepfunctionStack extends Stack {
       }
     });
 
+    // Create Debug LogGroup (for human readable state machine logs)
+    const debugLogGroup = new LogGroup(this, 'DebugLogGroup', {
+      removalPolicy: RemovalPolicy.DESTROY,
+      retention: RetentionDays.ONE_WEEK
+    });
+
+    // Create State Machine log group (for full state machine logging)
+    const SFlogGroup = new LogGroup(this, 'SfLogGroup', {
+      removalPolicy: RemovalPolicy.DESTROY,
+      retention: RetentionDays.ONE_WEEK
+    });
+
+    // Create EventBridge
+    const LogEventBridge = new EventBus(this, 'EventBridge');
+    const LogEventRule = new Rule(this, 'LogEventRule', {
+      eventBus: LogEventBridge,
+      description: 'Logs all events to CloudWatch Logs',
+      enabled: true,      
+      eventPattern: { source: ['custom.eventbus'] },
+      targets: [
+        new CloudWatchLogGroup(debugLogGroup)
+      ]
+    });
+      
     // Option 1 - Get DDB record using Lambda (512MB, nodejs connection reuse)
 
     // Create Lambda layer with X-Ray tracing
@@ -45,7 +71,7 @@ export class CdkApiStepfunctionStack extends Stack {
       },
       layers: [lambdaLayers],
       bundling: {
-        externalModules: ['aws-xray-sdk-core']
+        externalModules: ['aws-sdk', 'aws-xray-sdk-core']
       }
     });
 
@@ -55,14 +81,14 @@ export class CdkApiStepfunctionStack extends Stack {
       resultSelector: {
         "LambdaRecordContent.$": "$.Payload"
       },
-      resultPath: '$'
+      resultPath: '$.lambdaPut'
     });
 
     // Option 2 - Create SF SDK Step to get DDB record
     const sdkGetDdbRecord = new DynamoGetItem(this, 'DdbRecordSdkGet', {
       table: ddbTable,
       key: { 
-        id: DynamoAttributeValue.fromString("lambdaGet") 
+        id: DynamoAttributeValue.fromString("sdkGet") 
       },
       resultSelector: {
         "SdkrecordContent.$": "$.Item"
@@ -70,14 +96,41 @@ export class CdkApiStepfunctionStack extends Stack {
       resultPath: '$'
     });
 
+
+    function putEventBridgeRecord (logstring: string) {
+      
+      // Put map output event to EventBridge
+      const putEventBridge = new CustomState(scope, logstring, {
+        stateJson: {
+          "Type": "Task",
+          "Resource": "arn:aws:states:::events:putEvents",
+          "Parameters": {
+            "Entries": [
+              {
+                "EventBusName": LogEventBridge.eventBusName,
+                "Detail": {
+                  "event.$": "$"
+                },
+                "DetailType": "eventDelivery",
+                "Source": "custom.eventbus"
+              }
+            ]
+          },
+          "ResultPath": "$.eventput",
+          //"ResultPath": null
+        }
+      })
+
+      return putEventBridge;
+    }
+
     // Create SF definition (do parallel get from Lambda and SF SDK to DynamoDB)
     const sfDefinition = new Parallel(this, 'sfDefinition');
-    sfDefinition.branch(lambdaGetDdbRecord)
-    sfDefinition.branch(sdkGetDdbRecord)
+    sfDefinition.branch(lambdaGetDdbRecord.next(putEventBridgeRecord("lambdaGetDdbRecord"))
+    )
+    sfDefinition.branch(sdkGetDdbRecord.next(putEventBridgeRecord("sdkGetDdbRecord"))
+    )
     .next(new Pass(this, 'End'));
-
-    // Create State Machine log group
-    const logGroup = new LogGroup(this, 'SfLogGroup');
 
     // Create express state machine with logging enabled
     const stateMachine = new StateMachine(this, 'StateMachine', {
@@ -86,7 +139,7 @@ export class CdkApiStepfunctionStack extends Stack {
       stateMachineType: StateMachineType.EXPRESS,
       timeout: Duration.minutes(1),
       logs: {
-        destination: logGroup,
+        destination: SFlogGroup,
         level: LogLevel.ALL
       },
     });
@@ -94,5 +147,11 @@ export class CdkApiStepfunctionStack extends Stack {
     // Grant DynamoDB read access to State Machine and Lambda
     ddbTable.grantReadData(stateMachine);
     ddbTable.grantReadData(ddbGetLambda);
+
+    // Grant State Machine with write access to debug log group
+    debugLogGroup.grantWrite(stateMachine);
+
+    // Grant State Machine with write access to EventBridge
+    LogEventBridge.grantPutEventsTo(stateMachine);
   }
 }
