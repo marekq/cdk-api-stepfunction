@@ -1,10 +1,10 @@
 import { Construct, Duration, RemovalPolicy, Stack, StackProps } from '@aws-cdk/core';
-import { CustomState, LogLevel, Parallel, Pass, StateMachine, StateMachineType, Succeed } from '@aws-cdk/aws-stepfunctions';
+import { CustomState, LogLevel, Parallel, StateMachine, StateMachineType, Succeed } from '@aws-cdk/aws-stepfunctions';
 import { NodejsFunction } from '@aws-cdk/aws-lambda-nodejs';
 import { Architecture, Code, LayerVersion, Runtime, Tracing } from '@aws-cdk/aws-lambda';
 import { AttributeType, Table } from '@aws-cdk/aws-dynamodb';
 import { DynamoAttributeValue, DynamoGetItem, LambdaInvoke } from '@aws-cdk/aws-stepfunctions-tasks';
-import { LogGroup, LogStream, RetentionDays } from '@aws-cdk/aws-logs';
+import { LogGroup, RetentionDays } from '@aws-cdk/aws-logs';
 import { EventBus, Rule} from '@aws-cdk/aws-events';
 import { CloudWatchLogGroup } from '@aws-cdk/aws-events-targets';
 
@@ -93,10 +93,11 @@ export class CdkApiStepfunctionStack extends Stack {
       resultSelector: {
         "SdkrecordContent.$": "$.Item"
       },
-      resultPath: '$'
+      resultPath: '$.sdkPut'
     });
 
 
+    // Function for put event bridge record - input the log string to submit
     function putEventBridgeRecord (logstring: string) {
       
       // Put map output event to EventBridge
@@ -109,15 +110,14 @@ export class CdkApiStepfunctionStack extends Stack {
               {
                 "EventBusName": LogEventBridge.eventBusName,
                 "Detail": {
-                  "event.$": "$"
+                  "event": logstring
                 },
                 "DetailType": "eventDelivery",
                 "Source": "custom.eventbus"
               }
             ]
           },
-          "ResultPath": "$.eventput",
-          //"ResultPath": null
+          "ResultPath": "$." + logstring
         }
       })
 
@@ -126,11 +126,15 @@ export class CdkApiStepfunctionStack extends Stack {
 
     // Create SF definition (do parallel get from Lambda and SF SDK to DynamoDB)
     const sfDefinition = new Parallel(this, 'sfDefinition');
-    sfDefinition.branch(lambdaGetDdbRecord.next(putEventBridgeRecord("lambdaGetDdbRecord"))
+    sfDefinition.branch(
+      lambdaGetDdbRecord.next(putEventBridgeRecord("Submitted record using Lambda"))
     )
-    sfDefinition.branch(sdkGetDdbRecord.next(putEventBridgeRecord("sdkGetDdbRecord"))
+    sfDefinition.branch(
+      sdkGetDdbRecord.next(putEventBridgeRecord("Submitted record using SF SDK request"))
     )
-    .next(new Pass(this, 'End'));
+    .next(
+      new Succeed(this, 'End')
+    );
 
     // Create express state machine with logging enabled
     const stateMachine = new StateMachine(this, 'StateMachine', {
