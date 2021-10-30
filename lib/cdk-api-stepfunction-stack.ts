@@ -97,10 +97,10 @@ export class CdkApiStepfunctionStack extends Stack {
     });
 
 
-    // Function for put event bridge record - input the log string to submit
+    // Function for put EventBridge record - input the log string to submit
     function putEventBridgeRecord (logstring: string) {
       
-      // Put map output event to EventBridge
+      // Put given log string to EventBridge
       const putEventBridge = new CustomState(scope, logstring, {
         stateJson: {
           "Type": "Task",
@@ -124,16 +124,20 @@ export class CdkApiStepfunctionStack extends Stack {
       return putEventBridge;
     }
 
-    // Create SF definition (do parallel get from Lambda and SF SDK to DynamoDB)
+    // Create SF definition (do parallel get from Lambda and SF SDK to DynamoDB. Next, write log to EventBridge.)
     const sfDefinition = new Parallel(this, 'sfDefinition');
     sfDefinition.branch(
-      lambdaGetDdbRecord.next(putEventBridgeRecord("Submitted record using Lambda"))
+      lambdaGetDdbRecord
+      .next(putEventBridgeRecord("Submitted record using Lambda"))
     )
     sfDefinition.branch(
-      sdkGetDdbRecord.next(putEventBridgeRecord("Submitted record using SF SDK request"))
+      sdkGetDdbRecord
+      .next(putEventBridgeRecord("Submitted record using SF SDK request"))
     )
+
+    // Complete SF definition
     .next(
-      new Succeed(this, 'End')
+      new Succeed(this, 'Finished')
     );
 
     // Create express state machine with logging enabled
