@@ -1,6 +1,17 @@
 cdk-api-stepfunction
 ====================
 
-A demo CDK stack to retrieve a record using two methods from DynamoDB. The Express Step Function has a parallel step where one branch retrieves the record using the Step Functions SDK integration. The second branch retrieves the record using a NodeJS Lambda function. You can use this stack to compare and benchmark the latency behind each method.
+A demo CDK stack to retrieve a record from DynamoDB using Express Step Function. The State Machine contains no Lambda functions but can validate the inputs and format the output records that are retrieved. All events are logged to EventBridge for "human friendly" logging of the process. 
+
+# State Machine
 
 ![alt tag](./diagrams/statemachine.png)
+
+# X-Ray trace
+
+![alt tag](./diagrams/xray.png)
+
+# FAQ
+
+Is this an overcomplicated design? Possibly. 
+Could it be simplified? Definitely. 
