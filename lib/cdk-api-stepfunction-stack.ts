@@ -82,7 +82,7 @@ export class CdkApiStepfunctionStack extends Stack {
     }
       
     // Get DynamoDB record from table
-    const sdkGetDdbRecord = new DynamoGetItem(this, 'SDK - Get Record from DynamoDB', {
+    const sdkGetDdbRecord = new DynamoGetItem(this, 'Get Record from DynamoDB', {
       table: ddbTable,
       key: { 
         orderid: DynamoAttributeValue.fromString(JsonPath.stringAt("$.orderid"))
@@ -95,7 +95,7 @@ export class CdkApiStepfunctionStack extends Stack {
     .when(Condition.isPresent('$.sdkget.Item'), 
 
       // Order ID was found in DynamoDB
-      new Pass(this, 'PASS - orderid record found', {
+      new Pass(this, 'PASS - Order ID found in DynamoDB', {
         inputPath: '$.sdkget.Item',
         parameters: {
           '$.sdkPut.Item': '$.sdkPut.Item'
@@ -108,16 +108,16 @@ export class CdkApiStepfunctionStack extends Stack {
 
     .otherwise(
 
-      new Pass(this, "orderid field not found in dynamodb", {
+      new Pass(this, "OrderID field not found in dynamodb", {
         parameters: {
-          "error": "orderid field not found in dynamodb",
+          "error": "OrderID field not found in dynamodb",
           "request.$": "$"
         },
         outputPath: '$.error',
         resultPath: "$.error"
       })
 
-      .next(putEventBridgeRecord('ERROR - orderid not found'))
+      .next(putEventBridgeRecord('ERROR - OrderID not found in DynamoDB'))
     );
 
 
@@ -139,14 +139,23 @@ export class CdkApiStepfunctionStack extends Stack {
         .when(Condition.isPresent('$.orderid'),
           sdkGetDdbRecord
 
-            // Check if record was found in DynamoDB
-            .next(checkDdbRecord)
+          // Check if record was found in DynamoDB
+          .next(checkDdbRecord)
         )
 
         .otherwise(
 
-          // ERROR - $.orderid field is not present in input
-          putEventBridgeRecord("ERROR - no orderid field")
+          new Pass(this, "No OrderID field found in input", {
+            parameters: {
+              "error": "No OrderID field found in input",
+              "request.$": "$"
+            },
+            outputPath: '$.error',
+            resultPath: "$.error"
+          })
+
+          // ERROR - OrderID field is not present in input
+          .next(putEventBridgeRecord("ERROR - No OrderID field found in input"))
         )
       )
         
@@ -160,7 +169,7 @@ export class CdkApiStepfunctionStack extends Stack {
           resultPath: "$.request"
         })
 
-        .next(putEventBridgeRecord("LOG - PUT request received"))
+        .next(putEventBridgeRecord("LOG - PUT request input received"))
       )
 
       // ERROR - unknown method in input
