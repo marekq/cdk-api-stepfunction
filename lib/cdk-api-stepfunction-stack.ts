@@ -1,11 +1,13 @@
-import { Construct, Duration, RemovalPolicy, Stack, StackProps } from '@aws-cdk/core';
-import { Choice, Condition, CustomState, JsonPath, LogLevel, Parallel, Pass, StateMachine, StateMachineType, Succeed } from '@aws-cdk/aws-stepfunctions';
-import { AttributeType, BillingMode, Table } from '@aws-cdk/aws-dynamodb';
-import { DynamoAttributeValue, DynamoGetItem, LambdaInvoke } from '@aws-cdk/aws-stepfunctions-tasks';
-import { LogGroup, RetentionDays } from '@aws-cdk/aws-logs';
-import { EventBus, Rule} from '@aws-cdk/aws-events';
-import { CloudWatchLogGroup } from '@aws-cdk/aws-events-targets';
-import { Bucket } from '@aws-cdk/aws-s3';
+import { Duration, RemovalPolicy, Stack, StackProps } from 'aws-cdk-lib';
+import { Choice, Condition, CustomState, JsonPath, LogLevel, Parallel, Pass, StateMachine, StateMachineType, Succeed } from 'aws-cdk-lib/aws-stepfunctions';
+import { AttributeType, BillingMode, Table } from 'aws-cdk-lib/aws-dynamodb';
+import { DynamoAttributeValue, DynamoGetItem, LambdaInvoke } from 'aws-cdk-lib/aws-stepfunctions-tasks';
+import { LogGroup, RetentionDays } from 'aws-cdk-lib/aws-logs';
+import { EventBus, Rule} from 'aws-cdk-lib/aws-events';
+import { CloudWatchLogGroup } from 'aws-cdk-lib/aws-events-targets';
+import { Bucket } from 'aws-cdk-lib/aws-s3';
+import { StepFunctionsRestApi } from 'aws-cdk-lib/aws-apigateway';
+import { Construct } from 'constructs';
 
 export class CdkApiStepfunctionStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
@@ -38,8 +40,6 @@ export class CdkApiStepfunctionStack extends Stack {
       removalPolicy: RemovalPolicy.DESTROY,
       retention: RetentionDays.ONE_WEEK
     });
-
-
     
     // Create new EventBridge
     const LogEventBridge = new EventBus(this, 'EventBridge');
@@ -85,7 +85,7 @@ export class CdkApiStepfunctionStack extends Stack {
     const sdkGetDdbRecord = new DynamoGetItem(this, 'Get Record from DynamoDB', {
       table: ddbTable,
       key: { 
-        orderid: DynamoAttributeValue.fromString(JsonPath.stringAt("$.orderid"))
+        orderid: DynamoAttributeValue.fromString(JsonPath.stringAt("$.body.orderid"))
       },
       resultPath: '$.sdkget'
     });
@@ -125,18 +125,18 @@ export class CdkApiStepfunctionStack extends Stack {
     const sfDefinition = new Choice(this, 'Check if method field exists')
 
     // Check if method field is present
-    .when(Condition.isPresent('$.method'),
+    .when(Condition.isPresent('$.body.method'),
     
       // Check value of $.method field
       new Choice(this, 'Check value of method field')
 
       // If $.method field is 'GET'
-      .when(Condition.stringEquals('$.method', 'get'), 
+      .when(Condition.stringEquals('$.body.method', 'get'), 
         
         new Choice(this, "Check if order id field is present")
 
         // Retrieve record from DynamoDB
-        .when(Condition.isPresent('$.orderid'),
+        .when(Condition.isPresent('$.body.orderid'),
           sdkGetDdbRecord
 
           // Check if record was found in DynamoDB
@@ -160,7 +160,7 @@ export class CdkApiStepfunctionStack extends Stack {
       )
         
       // PUT condition found in input
-      .when(Condition.stringEquals('$.method', 'put'),
+      .when(Condition.stringEquals('$.body.method', 'put'),
 
         new Pass(this, "PUT request input received", {
           parameters: {
@@ -225,5 +225,10 @@ export class CdkApiStepfunctionStack extends Stack {
 
     // Grant State Machine with write access to EventBridge
     LogEventBridge.grantPutEventsTo(stateMachine);
+
+    const sfRestApi = new StepFunctionsRestApi(this, 'StepFunctionsRestApi', {
+      stateMachine: stateMachine,
+      deploy: true
+    });
   }
 }
