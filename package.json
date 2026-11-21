@@ -14,14 +14,14 @@
     "@aws-cdk/assert": "2.1.0",
     "@types/jest": "^27.0.3",
     "@types/node": "16.11.12",
-    "aws-cdk": "2.1.0",
-    "jest": "^27.4.3",
+    "aws-cdk": "2.14.0",
+    "jest": "28.0.0-alpha.0",
     "ts-jest": "^27.1.1",
     "ts-node": "^10.4.0",
     "typescript": "~4.5.3"
   },
   "dependencies": {
-    "aws-cdk-lib": "2.1.0",
+    "aws-cdk-lib": "2.267.0",
     "constructs":"^10.0.10",
     "source-map-support": "^0.5.21"
   }
